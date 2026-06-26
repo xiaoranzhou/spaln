@@ -232,6 +232,7 @@ public:
 	    size_t		bufsiz =  10 * Np1 + 6 * nelem;
 	    if (mode > 1)	bufsiz += (8 * Np1 + 6 * nelem);
 	    abuf = new var_t[bufsiz];
+	    vec_clear(abuf, bufsiz);
 	    ps_a = abuf;
 	    pv_a = ps_a + nelem;
 	    hv_a[0] = pv_a + nelem;
@@ -296,6 +297,8 @@ public:
 	    vbuf = new var_t[((mode > 1)? (used? 4: 3): 2) * 
 		pwd->Noll * buf_size];
 	    vec_set(vbuf, nevsel, pwd->Noll * buf_size);
+	    vec_clear(bbuf = vbuf + pwd->Noll * buf_size,
+		((mode > 1)? (used? 3: 2): 1) * pwd->Noll * buf_size);
 
 	    hv = vbuf - wdw.lw + 1;
 	    fv = hv + buf_size;

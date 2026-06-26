@@ -23,6 +23,9 @@
 #include "kmers.h"
 #include "npssm.h"
 #include <math.h>
+#if defined(__APPLE__) || !defined(__GLIBC__)
+static inline double exp10(double x) { return pow(10.0, x); }  // glibc-only; macOS shim
+#endif
 
 static	bool	binary = false;
 static	float	sig_thr = 0.025;

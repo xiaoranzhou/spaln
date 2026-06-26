@@ -46,6 +46,20 @@
 #include <gsl/gsl_sf_gamma.h>
 #include <gsl/gsl_sf_psi.h>
 
+// ── macOS / non-glibc portability shims for fitild (exp10, drand48_r) ──
+// exp10 is used as a function pointer (DblDbl), so it must be a real function,
+// not a macro. Drand48_data + drand48_r are glibc-only; the sampling paths that
+// use them are dead code here, but must still compile.
+#if defined(__APPLE__) || !defined(__GLIBC__)
+#include <stdlib.h>
+static inline double exp10(double x) { return pow(10.0, x); }
+struct drand48_data { unsigned short __x[3]; };
+static inline int srand48_r(long s, struct drand48_data* b) {
+	b->__x[0] = 0x330e; b->__x[1] = (unsigned short)s; b->__x[2] = (unsigned short)(s >> 16); return 0;
+}
+static inline int drand48_r(struct drand48_data* b, double* r) { *r = erand48(b->__x); return 0; }
+#endif
+
 enum	StatDist {FRECHET, LOGNORMAL, GEOMETRIC, GAMMA, WEIBULL};
 enum	GplotMode {INITIAL, CONT, LAST};
 enum	IldOutMode {PDF, CDF, Penalty};

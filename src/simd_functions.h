@@ -26,7 +26,15 @@
 #ifndef _SIMD_FUNCTIONS_
 #define _SIMD_FUNCTIONS_
 
-#if defined(__SSE4_1__)
+#if defined(__ARM_NEON) && !defined(__x86_64__)
+// On arm64: emulate SSE4.1 via sse2neon so the SSE code path runs on NEON.
+// This forces identical integer seeder tie-breaking with the x86 SSE4.1 binary.
+// sse2neon.h includes <arm_neon.h> internally and provides all _mm_* intrinsics.
+#include "sse2neon.h"
+#ifndef __SSE4_1__
+#define __SSE4_1__ 1
+#endif
+#elif defined(__SSE4_1__)
 #include <x86intrin.h>
 #elif defined(__ARM_NEON)
 #include <arm_neon.h>

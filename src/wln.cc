@@ -343,7 +343,7 @@ const	SGPT6*	bb = 0;
 	    jxt->jx--; jxt->jy -= bbt;
 	    ++jxt->jlen;
 	    if (*as == *bs || (*as == SER && *bs == SER2)) ++jxt->nid;
-	    if (bb) bb -= bbt;
+	    if (bb && b->exin->good(bb - bbt)) bb -= bbt;
 	}
 	if (as < ax) bs -= bbt;
 	at = a->at(std::min(jxt->jx + jxt->jlen, a->right));
@@ -364,7 +364,7 @@ const	CHAR*	al = as;
 	    ++jxt->jlen;
 	    scr += wlparams->sim2(as, bs);
 	    if (*as == *bs || (*as == SER && *bs == SER2)) ++jxt->nid;
-	    if (bb) {
+	    if (bb && b->exin->good(bb)) {
 		scr += bb->sigE;
 		bb += bbt;
 	    }
@@ -390,7 +390,7 @@ const	CHAR*	al = as;
 	int	nmmc = std::min(jxt->jlen - jxt->nid, 3);
 	if (algmode.crs == 0 && bbt == 3 && nmmc)
 	    scr -= nmmc * wlprm->vthr;
-	if (as == az && bb && bb->sigT > 0) scr += wlprm->vthr / 2;
+	if (as == az && bb && b->exin->good(bb) && bb->sigT > 0) scr += wlprm->vthr / 2;
 	else {
 const	    int	rend = wlprm->tpl - a->right + jxt->jx + jxt->jlen;
 	    if (a->inex.exgr && rend > 0) {
@@ -556,6 +556,7 @@ const	    INT	c = wlprm->ConvTab[*bs++];
 	    else	bpp->flaw();
 	}
 	for (INT n = 0; n < nn; ) {
+	    if (mfd->size() > (size_t)maxnjxt) break;	// Wilip discards >maxnjxt anyway
 const	    INT	c = wlprm->ConvTab[*bs++];
 	    if (bpp->good(c)) {
 		INT	w = bpp->word(c);
@@ -603,6 +604,7 @@ const	    INT	c = wlprm->ConvTab[*bs++];
 	    } else	bpp->flaw(p);
 	}
 	for (INT n = 0; n < nn; p = next_p[p]) {
+	    if (mfd->size() > (size_t)maxnjxt) break;	// Wilip discards >maxnjxt anyway
 const	    INT c = wlprm->ConvTab[*bs++];
 	    if (bpp->good(c)) {
 const		INT	w = bpp->word(c, p);

@@ -34,7 +34,7 @@ VMFBLK* Vmf::newblk()
 {
 	VMFBLK*	    prv = blk;
 
-	cur = new SKLP[VMFBLKSIZE];
+	cur = new SKLP[VMFBLKSIZE]();	// value-init: zeroes all .p fields; prevents stale-pointer loop when jemalloc reuses freed blocks
 	brk = cur + VMFBLKSIZE;
 	blk = new VMFBLK;
 	blk->ptr = cur;
@@ -127,9 +127,13 @@ SKL* Vmf::traceback(int pp)
 	SKLP	sv;
 	Mfile	mfd(sizeof(SKL));
 	mfd.write(&sv);
+const	int	_max_steps = idx;	// save before readvmf's vmfseek corrupts idx
 	if (readvmf(&sv, pp) == ERROR) return (vmferror(mfd));
 	mfd.write(&sv);
+	int _steps = 0;
 	while (sv.p) {
+	    if (++_steps > _max_steps)	// cycle: p chain longer than total records
+		return (vmferror(mfd));
 	    if (readvmf(&sv, sv.p) == ERROR) return (vmferror(mfd));
 	    mfd.write(&sv);
 	}

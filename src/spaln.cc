@@ -105,7 +105,7 @@ static	void	readargs();
 static	RANGE*	skl2exrng(SKL* skl);
 static	int	spalign2(Seq* sqs[], PwdB* pwd, Gsinfo* GsI, int ori = 1);
 static	SrchBlk*	getblkinf(Seq* sqs[], const char* dbs, MakeBlk* mb);
-static	void	seg_job(Seq** sqs, SeqServer* svr, SrchBlk* sbk);
+static	void	seg_job(Seq** sqs, SeqServer* svr, SrchBlk* sbk, ThQueue* q = 0);
 static	void	all_in_func(Seq** sqs, SeqServer* svr, void* prm);
 static	void	setdefparam();
 static	PwdB*	SetUpPwd(Seq* sqs[]);
@@ -1134,14 +1134,14 @@ static void spaln_job(Seq* sqs[], void* prm, ThQueue* q)
 	else	match_2(sqs, pwd, q);
 }
 
-static void seg_job(Seq** sqs, SeqServer* svr, SrchBlk* sbk)
+static void seg_job(Seq** sqs, SeqServer* svr, SrchBlk* sbk, ThQueue* q)
 {
 	if (!sbk) fatal("No block inf !\n");
 	if (QRYvsDB == GvsA) genomicseq(sqs, sbk->pwd, 1);
-	quick4(sqs, sbk);
+	quick4(sqs, sbk, q);
 	if (QRYvsDB == GvsC) return;
 	antiseq(sqs);
-	quick4(sqs, sbk);
+	quick4(sqs, sbk, q);
 	antiseq(sqs);
 }
 
@@ -1346,7 +1346,7 @@ static void* worker_func(void* arg)
 	    if (targ->seqs[0]->many == 0) break;
 	    if (targ->svr->input_ns == 2 && targ->seqs[1]->many == 0) break;
 	    if (gsquery) {
-		seg_job(targ->seqs, targ->svr, sbk);
+		seg_job(targ->seqs, targ->svr, sbk, targ->q);
 	    } else {
 		(void) spaln_job(targ->seqs, targ->pwd, targ->q);
 	    }

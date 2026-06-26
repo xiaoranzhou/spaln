@@ -7,7 +7,10 @@ alndbs_dir = /db/seqdb
 CXX  = g++
 # for MACOS uncomment below line
 #CXX  = clang++ -std=c++11
-CFLAGS = -O3 -march=native
+# -ftrivial-auto-var-init=zero is load-bearing for reproducible multi-thread
+# SPALN output: without it, uninitialized automatic variables in the SIMD path
+# produce run-to-run score differences (including the NEVSEL sentinel).
+CFLAGS = -O3 -march=native -ftrivial-auto-var-init=zero
 #CFLAGS = -g -O0 -march=native
 #CFLAGS = -g -O0 -Wall -march=native -fsanitize=address -fno-omit-frame-pointer
 RANLIB = ranlib
