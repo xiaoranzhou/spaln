@@ -328,7 +328,7 @@ const	SGPT6*	bb = 0;
 	    ++bs;
 	    if (b->exin) {
 		bb = (const SGPT6*) b->exin->score_p(jxt->jy + 1);
-		if (bb && jxt->jx == 0 && *as == MET && bb->sigS > 0)
+		if (b->exin->good(bb) && jxt->jx == 0 && *as == MET && bb->sigS > 0)
 		    scr = wlprm->vthr / 2;
 	    }
 	}
@@ -343,7 +343,7 @@ const	SGPT6*	bb = 0;
 	    jxt->jx--; jxt->jy -= bbt;
 	    ++jxt->jlen;
 	    if (*as == *bs || (*as == SER && *bs == SER2)) ++jxt->nid;
-	    if (bb && b->exin->good(bb - bbt)) bb -= bbt;
+	    if (bb) bb -= bbt;	// keep bb in sync with bs; reads are guarded below
 	}
 	if (as < ax) bs -= bbt;
 	at = a->at(std::min(jxt->jx + jxt->jlen, a->right));
@@ -364,9 +364,9 @@ const	CHAR*	al = as;
 	    ++jxt->jlen;
 	    scr += wlparams->sim2(as, bs);
 	    if (*as == *bs || (*as == SER && *bs == SER2)) ++jxt->nid;
-	    if (bb && b->exin->good(bb)) {
-		scr += bb->sigE;
-		bb += bbt;
+	    if (bb) {
+		if (b->exin->good(bb)) scr += bb->sigE;
+		bb += bbt;	// always advance: keeps bb in sync with bs
 	    }
 // Kadane-Gries algorithm
 	    if (scr < 0) {
