@@ -1851,6 +1851,7 @@ void SrchBlk::init2(const Seq* sd)
 {
 	vclear(bh2->rscr, nseg);
 	bh2->prqueue_b->reset();
+	bh2->sigm = 0;
 const	CHAR*	ss = sd->at(sd->left);
 const	CHAR*	ts = sd->at(sd->right - (bpp[0]->width + wcp.Nshift) + 1);
 	INT	q = (ts - ss) % wcp.Nshift;
@@ -2749,6 +2750,10 @@ Qwords::Qwords(int k, int nc, CHAR* ct, ContBlk* pwc, Bitpat** bp, Seq* a) :
 	xx = new int[kk];
 	front = new BLKTYPE[kk];
 	endss = new CHAR*[kk];
+	vclear(ww, kk);
+	vclear(xx, kk);
+	vclear(front, kk);
+	vclear(endss, kk);
 	if (kk > 1) app_c = pow((double) wcp.Nbitpat, cfact);
 	if (a) reset(a);
 }
@@ -3077,9 +3082,12 @@ Bhit2::Bhit2(int nseg)
 	sigm = 0;
 	rscr = new int[nseg];		// block score continuous hits
 	blkscr = new BlkScr[Ncand + 1];
+	vclear(rscr, nseg);
+	vclear(blkscr, Ncand + 1);
 	prqueue_b = new PrQueue<BlkScr>(blkscr, Ncand, 0, false, true);
 	as[0] = new const CHAR*[2 * wcp.Nshift];
 	as[1] = as[0] + wcp.Nshift;
+	vclear(as[0], 2 * wcp.Nshift);
 }
 
 Bhit2::~Bhit2()
@@ -3108,6 +3116,7 @@ INT Bhit2::hsort()
 
 int SrchBlk::findh(Seq** sqs)
 {
+	critjscr = 0;
 	Seq*&	b = sqs[0];	// query
 	Seq*&	a = sqs[1];	// translated
 	Dhash<INT, int>	hh(2 * pbwc->MaxBlk, 0);
@@ -3198,6 +3207,7 @@ const		    CHAR*	ss = *ws;
 
 int SrchBlk::finds(Seq** sqs)
 {
+	critjscr = 0;
 	if (query->right - query->left - (wcp.Nshift + bpp[0]->width) < 1) return (ERROR);
 	init2(query);
 	int	c = (query->right - query->left) / (wcp.Nshift + wcp.Nshift) - 1;

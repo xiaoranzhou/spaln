@@ -1363,7 +1363,10 @@ static void MasterWorker(Seq** sqs, SeqServer* svr, void* prm)
 	max_queue_num = (max_queue_num + svr->input_ns - 1) / svr->input_ns * svr->input_ns;
 	thread_arg_t*	targ = new thread_arg_t[thread_num];
 	pthread_t*	worker = new pthread_t[thread_num];
-	SrchBlk*	primaty = svr->target_dbf? (SrchBlk*) prm: 0;
+	// For block-mode (protein-to-genome or database search), each worker must
+	// have its own SrchBlk. Sharing the primary SrchBlk across threads causes
+	// data races in the search state and nondeterministic output with -tN.
+	SrchBlk*	primaty = algmode.blk? (SrchBlk*) prm: 0;
 
 	ThQueue	q(sqs);
 	maarg.q = &q;
@@ -1375,15 +1378,27 @@ static void MasterWorker(Seq** sqs, SeqServer* svr, void* prm)
 	    targ[n].cpuid = n % cpu_num;
 	    if (n > 0) targ[n].seqs = targ[n - 1].seqs + no_seqs;
 	    targ[n].seqs[0]->inex = sqs[0]->inex;
-	    if (svr->target_dbf) {
-		targ[n].seqs[1]->inex = sqs[1]->inex;
-		if (n) {
-		    DbsDt*	dbf = new DbsDt(*svr->target_dbf);
-		    dbf->fseq = svr->target_dbf->dbsfopen();
-		    targ[n].pwd = (void*) new SrchBlk(primaty, dbf);
-		} else {
-		    primaty->reset(svr->target_dbf);
+	    if (algmode.blk) {
+		if (svr->target_dbf)
+		    targ[n].seqs[1]->inex = sqs[1]->inex;
+		// Each worker needs its own SrchBlk (search state is not thread-safe).
+		// The genome DbsDt is read-only once loaded into memory and can be
+		// shared safely. In database-search mode, secondaries get a private
+		// DbsDt clone (with its own FILE*) to avoid file-position races; the
+		// primary keeps the original target_dbf.
+		DbsDt*	dbf = 0;
+		if (n == 0) {
+		    dbf = svr->target_dbf? svr->target_dbf: dbs_dt[0];
+		    primaty->reset(dbf);
 		    targ[n].pwd = (void*) primaty;
+		} else {
+		    if (svr->target_dbf) {
+			dbf = new DbsDt(*svr->target_dbf);
+			dbf->fseq = svr->target_dbf->dbsfopen();
+		    } else {
+			dbf = dbs_dt[0];
+		    }
+		    targ[n].pwd = (void*) new SrchBlk(primaty, dbf);
 		}
 	    } else {
 		if (svr->input_form == IM_SNGL) {
@@ -1423,10 +1438,13 @@ static void MasterWorker(Seq** sqs, SeqServer* svr, void* prm)
 //	reportseq(targ[0].seqs, no_seqs * thread_num);
 	clearseq(targ[0].seqs, no_seqs * thread_num);
 	clearseq(q.sque, max_queue_num);
-	if (svr->target_dbf) {
+	if (algmode.blk) {
 	    for (int n = 1; n < thread_num; ++n) {
 		SrchBlk*	sbk = (SrchBlk*) targ[n].pwd;
-		sbk->dbf->clean();
+		// Only clean private cloned DbsDt handles; shared genome handles
+		// are deleted once by EraDbsDt().
+		if (sbk->dbf && sbk->dbf != dbs_dt[0] && sbk->dbf != dbs_dt[1])
+		    sbk->dbf->clean();
 		delete sbk;
 	    }
 	}
