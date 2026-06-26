@@ -10,7 +10,9 @@ CXX  = g++
 # -ftrivial-auto-var-init=zero is load-bearing for reproducible multi-thread
 # SPALN output: without it, uninitialized automatic variables in the SIMD path
 # produce run-to-run score differences (including the NEVSEL sentinel).
-CFLAGS = -O3 -march=native -ftrivial-auto-var-init=zero
+# Supported by Clang 8+ and GCC 12+; silently omitted on older compilers.
+ZERO_INIT := $(shell echo 'int main(){}' | $(CXX) -ftrivial-auto-var-init=zero -x c++ - -o /dev/null 2>/dev/null && echo -ftrivial-auto-var-init=zero)
+CFLAGS = -O3 -march=native $(ZERO_INIT)
 #CFLAGS = -g -O0 -march=native
 #CFLAGS = -g -O0 -Wall -march=native -fsanitize=address -fno-omit-frame-pointer
 RANLIB = ranlib

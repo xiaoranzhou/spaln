@@ -297,7 +297,7 @@ public:
 	    vbuf = new var_t[((mode > 1)? (used? 4: 3): 2) * 
 		pwd->Noll * buf_size];
 	    vec_set(vbuf, nevsel, pwd->Noll * buf_size);
-	    vec_clear(bbuf = vbuf + pwd->Noll * buf_size,
+	    vec_clear(vbuf + pwd->Noll * buf_size,
 		((mode > 1)? (used? 3: 2): 1) * pwd->Noll * buf_size);
 
 	    hv = vbuf - wdw.lw + 1;
