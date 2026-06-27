@@ -36,8 +36,6 @@
 #endif
 #elif defined(__SSE4_1__)
 #include <x86intrin.h>
-#elif defined(__ARM_NEON)
-#include <arm_neon.h>
 #endif
 
 static	const	CHAR	b32s2c_a[32] = 
