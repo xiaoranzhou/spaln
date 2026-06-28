@@ -33,6 +33,8 @@
 #ifndef	_FWD2S1_SIMD_CC_
 #define _FWD2S1_SIMD_CC_
 
+#ifndef NO_SIMD
+
 /*************************************************************************
 	nested class: Sjsites
 *************************************************************************/
@@ -1153,5 +1155,7 @@ const	    int	rl = b->left - a->left;
 }
 
 #include "fwd2s1_wip_simd.h"
+
+#endif	// NO_SIMD
 
 #endif	// _FWD2S1_SIMD_CC_
