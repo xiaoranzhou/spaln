@@ -7,3 +7,8 @@ dbs.h
 iolib.h
 spaln_mac_fix
 
+wasm_build/*.o
+wasm_build/*.a
+wasm_build/spaln.js
+wasm_build/spaln.wasm
+!wasm_build/Makefile
