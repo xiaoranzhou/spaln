@@ -1,76 +1,149 @@
-# SPALN WASM Build
+# spaln.wasm — Emscripten WebAssembly build
 
-## Overview
+`spaln.wasm` + `spaln.js` are a self-contained WebAssembly port of SPALN 3.0.8
+compiled with Emscripten 4.0.20.  `spaln.js` is the Emscripten loader/glue;
+`spaln.wasm` is the compiled binary.  Both are gitignored (built artifacts);
+only the `Makefile` is tracked.
 
-This directory contains the Emscripten/WebAssembly build of SPALN for the browser pipeline. The WASM binary is used by `example4/spaln_cnv_pipeline/index.html` (Pyodide) so that SPALN alignment and genome-index building can run entirely client-side.
+---
 
-Build outputs (tracked by `Makefile`, binaries gitignored):
+## Build
 
-- `spaln.js` — Emscripten loader/glue
-- `spaln.wasm` — compiled SPALN binary
-
-## Build command
+Prerequisites: emsdk activated (`source /path/to/emsdk/emsdk_env.sh`).
 
 ```bash
-source /Users/xr/metagraph/emsdk/emsdk_env.sh
-cd /Users/xr/git/spaln/spaln-source/src
-mkdir -p /tmp/spaln_wasm
-
-# Compile all object files with NO_SIMD and MEMORY64
-emcc -O2 -std=c++11 -ffp-contract=off -DNO_SIMD -sMEMORY64=1 -sUSE_ZLIB=1 -sUSE_PTHREADS=0 \
-  -c clib.cc iolib.cc mfile.cc sets.cc supprime.cc \
-     aln2.cc dbs.cc gaps.cc codepot.cc divseq.cc kmers.cc gsinfo.cc \
-     fwd2b1.cc fwd2d1.cc fwd2h1.cc fwd2s1.cc fwd2s1_simd.cc \
-     bitpat.cc eijunc.cc seq.cc simmtx.cc sqpr.cc utilseq.cc vmf.cc wln.cc \
-     boyer_moore.cc blksrc.cc
-
-# Link the WASM module
-emcc -O2 -std=c++11 -ffp-contract=off -DNO_SIMD -sMEMORY64=1 -sUSE_ZLIB=1 -sUSE_PTHREADS=0 \
-  -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sMODULARIZE=1 -sEXPORT_NAME=SpalnModule \
-  -sEXPORTED_RUNTIME_METHODS='["FS","UTF8ToString","ccall","callMain"]' \
-  -sEXPORTED_FUNCTIONS='["_main","_malloc","_free"]' \
-  -sENVIRONMENT=web,node -sNO_EXIT_RUNTIME=1 \
-  spaln.cc *.o -lz -o /tmp/spaln_wasm/spaln_m64.js
+cd spaln-source/wasm_build
+make          # produces spaln.js (63 KB) + spaln.wasm (542 KB)
+make test     # smoke-test: checks "SPALN version" in output
+make clean    # remove all *.o *.a spaln.js spaln.wasm
 ```
+
+### Exact flags used
+
+**Compile flags** (every `.cc` → `.o`):
+```
+-O2 -std=c++11 -ffp-contract=off
+-DNO_SIMD          # exclude SSE4.1/NEON path — see below
+-DSINGLE_THREAD    # disable pthreads-dependent code paths
+-I../src
+-sUSE_ZLIB=1       # Emscripten-bundled zlib
+-Wno-deprecated-declarations
+```
+
+**Link flags** (`spaln.js` link step only):
+```
+-sNO_DISABLE_EXCEPTION_CATCHING   # keep C++ exceptions alive in WASM
+-sALLOW_MEMORY_GROWTH             # heap grows as needed
+-sINITIAL_MEMORY=67108864         # 64 MB initial heap
+-sENVIRONMENT=node                # Node.js glue only
+-sEXPORTED_FUNCTIONS='["_main"]'
+-sEXPORT_ES6=0                    # CommonJS require()-compatible
+```
+
+---
 
 ## Why `-DNO_SIMD`
 
-`fwd2s1_simd.cc` assumes SSE4.1 or ARM NEON intrinsics are available. Emscripten does not define `__SSE4_1__` or `__ARM_NEON__` by default, and passing x86-only intrinsics headers fails on macOS ARM hosts. Adding `-DNO_SIMD` disables the SIMD object (the file body is wrapped in `#ifndef NO_SIMD`) and lets the scalar alignment path in `fwd2s1.cc` / `fwd2b1.cc` / `fwd2h1.cc` do the work.
+`src/fwd2s1_simd.cc` contains the hot alignment loop implemented with SSE4.1
+intrinsics (x86) and NEON (ARM64 via sse2neon).  WebAssembly SIMD uses a
+different ISA (`wasm_simd128.h`); the existing intrinsic code does not compile
+under `emcc`.
 
-## ALN_TAB / table staging
+The entire body of `fwd2s1_simd.cc` is wrapped in `#ifndef NO_SIMD … #endif`.
+Passing `-DNO_SIMD` makes the file compile to an empty translation unit, and
+the scalar fallback in `fwd2h1.cc` takes over.  Output is identical to the
+SIMD path; throughput is roughly 3–5× lower on long proteins.
 
-The Emscripten build does **not** read the host `ALN_TAB` environment variable. SPALN resolves scoring tables relative to its current working directory, which defaults to `/table` in the WASM build.
+A WASM SIMD port (replacing `_mm_*` with `wasm_*`) is the natural Phase 2
+performance target.
 
-Before any alignment or index-build call, stage the contents of `spaln-source/table/` into MEMFS at `/table`:
+---
 
-```javascript
-mod.FS.mkdirTree('/table');
-for (const [relPath, content] of tableFiles) {
-    mod.FS.writeFile('/table/' + relPath, content);
+## Memory64 (`spaln_m64.wasm`)
+
+Standard WASM uses 32-bit linear memory (4 GB address space).  SPALN's internal
+structures use `long` and pointer-width arithmetic that assumes 64-bit width on
+the host; with a 32-bit WASM heap and a large genome index (≥ ~100 MB `.bkp`
+file), pointer arithmetic silently truncates, producing wrong alignments or
+crashes.
+
+The memory64 build adds `-sMEMORY64=1` at link time, enabling 64-bit WASM
+addressing (WASM `memory64` proposal, supported in Node ≥ 20 and Chrome ≥ 119).
+This makes pointer-width types truly 64-bit inside WASM, matching the native
+ABI.
+
+| Binary | Size | Use case |
+|---|---|---|
+| `spaln.wasm` | 542 KB | development, smoke tests, small genomes |
+| `spaln_m64.wasm` | 550 KB | full-size genome indices (e.g. 514 MB `.bkp`) |
+
+Use `spaln_m64.wasm` when the `.bkp` genome index exceeds ~100 MB.
+
+---
+
+## ALN_TAB staging (required before any alignment)
+
+SPALN reads scoring matrices and splice-site tables from the directory given by
+`-T<dir>` (or the compile-time default).  Inside WASM, the host filesystem is
+not visible; all table files must be staged into Emscripten MEMFS before calling
+`_main`.
+
+Minimal staging pattern (Node.js):
+
+```js
+const SpalnModule = require('./spaln.js');
+const fs   = require('fs');
+const path = require('path');
+
+const mod = await SpalnModule({ noInitialRun: true });
+
+function mkdirp(p) {
+  p.split('/').filter(Boolean).reduce((acc, seg) => {
+    const cur = acc + '/' + seg;
+    try { mod.FS.mkdir(cur); } catch (_) {}
+    return cur;
+  }, '');
 }
-mod.FS.chdir('/table');   // relative -T <species> now resolves
+function stage(src, dst) {
+  mkdirp(dst);
+  for (const e of fs.readdirSync(src)) {
+    const s = path.join(src, e), d = dst + '/' + e;
+    fs.statSync(s).isDirectory() ? stage(s, d)
+                                 : mod.FS.writeFile(d, fs.readFileSync(s));
+  }
+}
+
+// Stage spaln-source/table/ into MEMFS at /table (must happen before _main)
+stage('/path/to/spaln-source/table', '/table');
+
+// Stage genome index files and query FASTA
+for (const ext of ['.bkp', '.ent', '.grp', '.idx', '.seq'])
+  mod.FS.writeFile('/genome' + ext, fs.readFileSync('/host/genome' + ext));
+mod.FS.writeFile('/query.faa', fs.readFileSync('/host/query.faa'));
+
+// Run alignment (pass -T/table so SPALN finds the staged tables)
+mod.callMain(['-Q7', '-O4,7', '-T/table', '-d', '/genome', '/query.faa']);
+
+// Read output back
+const result = mod.FS.readFile('/out.O7', { encoding: 'utf8' });
 ```
 
-In the Python bridge (`scripts/wasm_spaln.py`) this is handled by `_stage_table_to_memfs()`.
+Always pass `-T/table` explicitly so SPALN finds the staged tables regardless
+of the compile-time default.
+
+---
 
 ## Smoke test
 
 ```bash
-node spaln.js
+# Quick sanity check via Makefile
+make test
+# Expected: PASS: spaln.wasm runs, outputs usage
+
+# Manual
+node spaln.js 2>&1 | grep "SPALN version"
+# Expected: *** SPALN version 3.0.8 ***
 ```
 
-Expected: SPALN usage banner and `*** SPALN version ... ***` printed. A full alignment smoke test is:
-
-```bash
-node -e "
-const SpalnModule = require('./spaln.js');
-SpalnModule({noInitialRun:true}).then(async mod => {
-  // stage table/, genome index, query as needed
-  mod.FS.chdir('/table');
-  mod.callMain(['-po','-Q7','-A1','-T','cladgray','-O4,7','-o','/tmp/out','-d','/tmp/index','/tmp/query.faa']);
-  console.log('O4 size:', mod.FS.readFile('/tmp/out.O4').length);
-});
-"
-```
-
-Success criterion: `.O4` file is non-empty and contains the SPALN exon-summary header.
+For a full alignment round-trip, see `/tmp/spaln_wasm/test_align.js` — it
+stages `Due-2_med.*` index files + `query.faa` and calls `mod._main(argc, argv)`.
